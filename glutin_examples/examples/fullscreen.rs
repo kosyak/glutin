@@ -1,4 +1,5 @@
 mod support;
+use glutin::os::unix::WindowExt;
 
 use std::io::{self, Write};
 
@@ -31,12 +32,17 @@ fn main() {
         .with_title("Hello world!")
         .with_fullscreen(Some(monitor));
     let windowed_context = glutin::ContextBuilder::new()
+        .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGlEs, (2, 0)))
         .build_windowed(wb, &el)
         .unwrap();
 
     let windowed_context = unsafe { windowed_context.make_current().unwrap() };
+    let window = windowed_context.window();
 
     let gl = support::load(&windowed_context.context());
+
+    windowed_context.swap_buffers().unwrap();
+    window.gbm_set_crtc();
 
     let mut fullscreen = true;
     let mut running = true;
@@ -86,5 +92,6 @@ fn main() {
 
         gl.draw_frame([1.0, 0.5, 0.7, 1.0]);
         windowed_context.swap_buffers().unwrap();
+        window.gbm_page_flip();
     }
 }

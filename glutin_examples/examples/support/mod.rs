@@ -1,6 +1,16 @@
 use glutin::{self, PossiblyCurrent};
 
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
+
+use std::os::raw::{c_void, c_char, c_int};
+
+const RTLD_NOW: c_int = 0x002;
+
+#[link="dl"]
+extern {
+    pub fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
+    pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+}
 
 pub mod gl {
     pub use self::Gles2 as Gl;
@@ -32,8 +42,12 @@ extern "system" fn dbg_callback(
 }
 
 pub fn load(gl_context: &glutin::Context<PossiblyCurrent>) -> Gl {
-    let gl =
-        gl::Gl::load_with(|ptr| gl_context.get_proc_address(ptr) as *const _);
+    let libgl = unsafe { dlopen(b"libGLESv2.so.2\0".as_ptr() as *const _, RTLD_NOW) };
+
+    let gl = gl::Gl::load_with(|sym| {
+        let sym = CString::new(sym).unwrap();
+        unsafe { dlsym(libgl, sym.as_ptr()) }
+    });
 
     unsafe {
         gl.Enable(gl::DEBUG_OUTPUT);

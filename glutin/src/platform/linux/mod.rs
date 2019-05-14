@@ -8,6 +8,7 @@
 
 mod wayland;
 mod x11;
+mod gbm;
 
 use self::x11::X11Context;
 use crate::api::osmesa;
@@ -37,6 +38,7 @@ pub enum ContextType {
     X11,
     Wayland,
     OsMesa,
+    Egl,
 }
 
 #[derive(Debug)]
@@ -44,6 +46,7 @@ pub enum Context {
     X11(x11::Context),
     Wayland(wayland::Context),
     OsMesa(osmesa::OsMesaContext),
+    Gbm(gbm::Context),
 }
 
 impl Context {
@@ -80,6 +83,15 @@ impl Context {
                         ));
                     }
                 },
+                ContextType::Egl => match *c {
+                    Context::Gbm(_) => Ok(()),
+                    _ => {
+                        let msg = "Cannot share a Egl context with a non-Egl context";
+                        return Err(CreationError::PlatformSpecific(
+                            msg.into(),
+                        ));
+                    }
+                },
             }
         } else {
             Ok(())
@@ -102,6 +114,15 @@ impl Context {
             });
             wayland::Context::new(wb, el, pf_reqs, &gl_attr)
                 .map(|(win, context)| (win, Context::Wayland(context)))
+        } else if el.is_gbm() {
+            Context::is_compatible(&gl_attr.sharing, ContextType::Egl)?;
+
+            let gl_attr = gl_attr.clone().map_sharing(|ctx| match *ctx {
+                Context::Gbm(ref ctx) => ctx,
+                _ => unreachable!(),
+            });
+            gbm::Context::new(wb, el, pf_reqs, &gl_attr)
+                .map(|(win, context)| (win, Context::Gbm(context)))
         } else {
             Context::is_compatible(&gl_attr.sharing, ContextType::X11)?;
             let gl_attr = gl_attr.clone().map_sharing(|ctx| match *ctx {
@@ -137,6 +158,14 @@ impl Context {
             });
             wayland::Context::new_headless(&el, pf_reqs, &gl_attr, size)
                 .map(|ctx| Context::Wayland(ctx))
+        } else if el.is_gbm() {
+            Context::is_compatible(&gl_attr.sharing, ContextType::Egl)?;
+            let gl_attr = gl_attr.clone().map_sharing(|ctx| match *ctx {
+                Context::Gbm(ref ctx) => ctx,
+                _ => unreachable!(),
+            });
+            gbm::Context::new_headless(&el, pf_reqs, &gl_attr, size)
+                .map(|ctx| Context::Gbm(ctx))
         } else {
             Context::is_compatible(&gl_attr.sharing, ContextType::X11)?;
             let gl_attr = gl_attr.clone().map_sharing(|ctx| match *ctx {
@@ -154,6 +183,7 @@ impl Context {
             Context::X11(ref ctx) => ctx.make_current(),
             Context::Wayland(ref ctx) => ctx.make_current(),
             Context::OsMesa(ref ctx) => ctx.make_current(),
+            Context::Gbm(ref ctx) => ctx.make_current(),
         }
     }
 
@@ -163,6 +193,7 @@ impl Context {
             Context::X11(ref ctx) => ctx.make_not_current(),
             Context::Wayland(ref ctx) => ctx.make_not_current(),
             Context::OsMesa(ref ctx) => ctx.make_not_current(),
+            Context::Gbm(ref ctx) => ctx.make_not_current(),
         }
     }
 
@@ -172,6 +203,7 @@ impl Context {
             Context::X11(ref ctx) => ctx.is_current(),
             Context::Wayland(ref ctx) => ctx.is_current(),
             Context::OsMesa(ref ctx) => ctx.is_current(),
+            Context::Gbm(ref ctx) => ctx.is_current(),
         }
     }
 
@@ -181,6 +213,7 @@ impl Context {
             Context::X11(ref ctx) => ctx.get_api(),
             Context::Wayland(ref ctx) => ctx.get_api(),
             Context::OsMesa(ref ctx) => ctx.get_api(),
+            Context::Gbm(ref ctx) => ctx.get_api(),
         }
     }
 
@@ -193,6 +226,7 @@ impl Context {
             },
             Context::Wayland(ref ctx) => RawHandle::Egl(ctx.raw_handle()),
             Context::OsMesa(ref ctx) => RawHandle::Egl(ctx.raw_handle()),
+            Context::Gbm(ref ctx) => RawHandle::Egl(ctx.raw_handle()),
         }
     }
 
@@ -201,6 +235,7 @@ impl Context {
         match *self {
             Context::X11(ref ctx) => ctx.get_egl_display(),
             Context::Wayland(ref ctx) => ctx.get_egl_display(),
+            Context::Gbm(ref ctx) => ctx.get_egl_display(),
             _ => None,
         }
     }
@@ -210,6 +245,7 @@ impl Context {
         match *self {
             Context::X11(_) => (),
             Context::Wayland(ref ctx) => ctx.resize(width, height),
+            Context::Gbm(ref ctx) => ctx.resize(width, height),
             _ => unreachable!(),
         }
     }
@@ -220,6 +256,7 @@ impl Context {
             Context::X11(ref ctx) => ctx.get_proc_address(addr),
             Context::Wayland(ref ctx) => ctx.get_proc_address(addr),
             Context::OsMesa(ref ctx) => ctx.get_proc_address(addr),
+            Context::Gbm(ref ctx) => ctx.get_proc_address(addr),
         }
     }
 
@@ -228,6 +265,7 @@ impl Context {
         match *self {
             Context::X11(ref ctx) => ctx.swap_buffers(),
             Context::Wayland(ref ctx) => ctx.swap_buffers(),
+            Context::Gbm(ref ctx) => ctx.swap_buffers(),
             _ => unreachable!(),
         }
     }
@@ -237,6 +275,7 @@ impl Context {
         match *self {
             Context::X11(ref ctx) => ctx.get_pixel_format(),
             Context::Wayland(ref ctx) => ctx.get_pixel_format(),
+            Context::Gbm(ref ctx) => ctx.get_pixel_format(),
             _ => unreachable!(),
         }
     }
