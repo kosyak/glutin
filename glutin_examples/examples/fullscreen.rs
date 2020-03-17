@@ -7,40 +7,30 @@ use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::monitor::{MonitorHandle, VideoMode};
 use glutin::window::{Fullscreen, WindowBuilder};
 use std::io::{stdin, stdout, Write};
+use winit::platform::unix::WindowExtUnix;
 
 fn main() {
     let el = EventLoop::new();
 
-    print!(
-        "Please choose the fullscreen mode: (1) exclusive, (2) borderless: "
-    );
-    stdout().flush().unwrap();
-
-    let mut num = String::new();
-    stdin().read_line(&mut num).unwrap();
-    let num = num.trim().parse().ok().expect("Please enter a number");
-
-    let fullscreen = Some(match num {
-        1 => Fullscreen::Exclusive(prompt_for_video_mode(&prompt_for_monitor(
-            &el,
-        ))),
-        2 => Fullscreen::Borderless(prompt_for_monitor(&el)),
-        _ => panic!("Please enter a valid number"),
-    });
-
     let mut is_maximized = false;
     let mut decorations = true;
+    let fullscreen = Some(Fullscreen::Borderless(el.primary_monitor()));
 
     let wb = WindowBuilder::new()
         .with_title("Hello world!")
         .with_fullscreen(fullscreen.clone());
     let windowed_context = glutin::ContextBuilder::new()
+        .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGlEs, (2, 0)))
+        .with_srgb(true)
+        .with_vsync(true)
         .build_windowed(wb, &el)
         .unwrap();
 
     let windowed_context = unsafe { windowed_context.make_current().unwrap() };
 
     let gl = support::load(&windowed_context.context());
+
+    windowed_context.swap_buffers().unwrap();
 
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -92,6 +82,7 @@ fn main() {
             Event::RedrawRequested(_) => {
                 gl.draw_frame([1.0, 0.5, 0.7, 1.0]);
                 windowed_context.swap_buffers().unwrap();
+                windowed_context.window().gbm_page_flip();
             }
             _ => {}
         }

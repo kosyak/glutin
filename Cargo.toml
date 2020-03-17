@@ -9,3 +9,6 @@ members = [
     "glutin_gles2_sys",
     "glutin_emscripten_sys",
 ]
+
+[replace]
+"winit:0.22.0" = { git = 'https://github.com/kosyak/winit.git', branch = "master" }
